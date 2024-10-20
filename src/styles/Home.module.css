@@ -1,112 +1,204 @@
 .container {
+  padding: 20px;
+  background-color: #1e1e2e;
   min-height: 100vh;
-  padding: 0 0.5rem;
+  color: #cdd6f4;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(45deg, #1a1a2e, #16213e);
-}
-
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem 0;
-}
-
-.topSection {
-  flex: 0 0 auto;
-  margin-bottom: 2rem;
 }
 
 .title {
-  margin: 0;
-  line-height: 1.15;
-  font-size: 3rem;
+  color: #89b4fa;
   text-align: center;
-  color: #ffffff;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-  margin-bottom: 2rem;
+  margin-bottom: 20px;
 }
 
-.searchContainer {
-  width: 100%;
-  max-width: 600px;
-  margin: 0 auto;
+.mainContent {
+  display: flex;
+  justify-content: space-between;
+  flex: 1;
+  overflow: hidden;
+  max-height: calc(100vh - 100px);
+}
+
+.leftSection, .rightSection {
+  width: 48%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rightSection {
+  background-color: #313244;
+  padding: 20px;
+  border-radius: 8px;
 }
 
 .input {
   width: 100%;
-  padding: 1rem;
-  font-size: 1.2rem;
-  border: none;
-  border-radius: 8px;
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  transition: all 0.3s ease;
-}
-
-.input:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.5);
-}
-
-.input::placeholder {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.resultSection {
-  flex: 1 0 auto;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 1.5rem;
-  overflow-y: auto;
-  max-height: calc(100vh - 300px); /* Adjust this value as needed */
+  padding: 10px;
+  margin-bottom: 20px;
+  background-color: #313244;
+  border: 1px solid #45475a;
+  color: #cdd6f4;
+  border-radius: 4px;
 }
 
 .resultList {
   list-style-type: none;
   padding: 0;
-  margin: 0;
+}
+
+.resultSection {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .resultItem {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  transition: all 0.3s ease;
+  background-color: #313244;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-.resultItem:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.resultItem:hover, .resultItem.selected {
+  background-color: #45475a;
 }
 
 .abbreviation {
-  font-size: 1.2rem;
+  color: #89b4fa;
   font-weight: bold;
-  color: #4fd1c5;
-  margin-right: 1rem;
 }
 
 .meaning {
-  font-size: 1rem;
-  color: #ffffff;
+  margin-left: 10px;
+  color: #a6adc8;
 }
 
 .score {
-  font-size: 0.8rem;
-  color: #a0aec0;
   float: right;
+  color: #a6e3a1;
 }
 
-.loading, .error, .noResult, .instruction {
-  color: #ffffff;
-  text-align: center;
+.searchResult {
+  margin-bottom: 20px;
 }
 
-.error {
-  color: #fc8181;
+.searchResultTitle {
+  color: #89b4fa;
+  font-size: 18px;
+  text-decoration: none;
+}
+
+.searchResultTitle:hover {
+  text-decoration: underline;
+}
+
+.searchResultLink {
+  color: #a6e3a1;
+  font-size: 14px;
+  text-decoration: none;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.searchResult p {
+  color: #a6adc8;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.searchResult p strong {
+  color: #f5e0dc;
+  font-weight: bold;
+}
+
+.detailSection h2, .detailSection h3 {
+  color: #89b4fa;
+}
+
+.detailSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.geminiResponse {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  padding: 10px;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.markdownPreview {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #f8f9fa;
+  color: #333;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.markdownPreview h1,
+.markdownPreview h2,
+.markdownPreview h3,
+.markdownPreview h4,
+.markdownPreview h5,
+.markdownPreview h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  color: #212529;
+}
+
+.markdownPreview p {
+  margin-bottom: 16px;
+}
+
+.markdownPreview a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.markdownPreview a:hover {
+  text-decoration: underline;
+}
+
+.markdownPreview code {
+  background-color: #f1f3f5;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 85%;
+  padding: 0.2em 0.4em;
+}
+
+.markdownPreview pre {
+  background-color: #f1f3f5;
+  border-radius: 3px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.markdownPreview pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.markdownPreview ul,
+.markdownPreview ol {
+  padding-left: 20px;
+}
+
+.markdownPreview blockquote {
+  border-left: 4px solid #ced4da;
+  margin-left: 0;
+  padding-left: 16px;
+  color: #6c757d;
 }
