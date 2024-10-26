@@ -25,11 +25,6 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-   const handleAbbreviationSelect = useCallback(async (abbreviation: string) => {
-    setSelectedAbbreviation(abbreviation);
-    await getAbbreviationDetails(abbreviation);
-  }, []);
-  
   const fuse = useMemo(() => {
     if (!abbreviations) return null;
     return new Fuse<string>(Object.keys(abbreviations as Abbreviations), {
@@ -44,38 +39,34 @@ export default function Home() {
     return fuse.search(input) as SearchResult[];
   }, [input, fuse]);
 
-async function getAbbreviationDetails(abbreviation: string) {
-    if (!abbreviation || !abbreviations) return;  // 早期リターン追加
+const getAbbreviationDetails = useCallback(async (abbreviation: string) => {
+    if (!abbreviation || !abbreviations) return;
     
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+        abortControllerRef.current.abort();
     }
 
     abortControllerRef.current = new AbortController();
 
     setIsLoading(true);
     setGeminiResponse('');
-    const meaning = (abbreviations as Abbreviations)[abbreviation];
+    const meaning = abbreviations[abbreviation];
     
-    // meaningが存在しない場合の処理を追加
     if (!meaning) {
-      setGeminiResponse('略語の意味が見つかりませんでした。');
-      setIsLoading(false);
-      return;
+        setGeminiResponse('略語の意味が見つかりませんでした。');
+        setIsLoading(false);
+        return;
     }
     
     try {
-      const response = await fetch('https://abbreviation-search.shigekazukoya.workers.dev/get-abbreviation-details', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          meaning,
-          abbreviation  // 略語も送信
-        }),
-        signal: abortControllerRef.current.signal
-      });
+        const response = await fetch('https://abbreviation-search.shigekazukoya.workers.dev/get-abbreviation-details', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ meaning, abbreviation }),
+            signal: abortControllerRef.current.signal
+        });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -139,7 +130,7 @@ async function getAbbreviationDetails(abbreviation: string) {
     } finally {
       setIsLoading(false);
     }
-  }
+  },[abbreviations]);
 
   useEffect(() => {
     return () => {
@@ -148,6 +139,22 @@ async function getAbbreviationDetails(abbreviation: string) {
       }
     };
   }, []);
+
+  const handleAbbreviationSelect = useCallback(async (abbreviation: string) => {
+    setSelectedAbbreviation(abbreviation);
+    await getAbbreviationDetails(abbreviation);
+}, [getAbbreviationDetails]); 
+  
+
+// デバッグログを追加
+useEffect(() => {
+  console.log('Abbreviations state:', {
+    abbreviations,
+    isLoading: isAbbreviationsLoading,
+    error,
+    hasData: abbreviations && Object.keys(abbreviations).length > 0
+  });
+}, [abbreviations, isAbbreviationsLoading, error]);
 
   useEffect(() => {
     if (searchResults.length > 0) {

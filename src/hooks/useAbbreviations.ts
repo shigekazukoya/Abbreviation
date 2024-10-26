@@ -21,20 +21,27 @@ const protoDefinition = `
 `;
 
 export function useAbbreviations() {
-    const [abbreviations, setAbbreviations] = useState<AbbreviationsData>({});
+    const [abbreviations, setAbbreviations] = useState<AbbreviationsData | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchAbbreviations = async () => {
             try {
+                // まず、ローカルストレージからデータを取得を試みる
+                const cachedData = localStorage.getItem('abbreviationsData');
+                if (cachedData) {
+                    setAbbreviations(JSON.parse(cachedData));
+                    setIsLoading(false);
+                }
+
                 // Protobufの型を動的に生成
                 const root = protobuf.parse(protoDefinition).root;
                 const AbbreviationsMessage = root.lookupType("Abbreviations");
 
                 const currentVersion = localStorage.getItem('abbreviationsVersion') || '0';
-                console.log('koko1');
 
+                // バージョンチェック
                 const versionCheckResponse = await fetch(`${WORKER_URL}/check-version?current=${currentVersion}`, {
                     mode: 'cors',
                     credentials: 'same-origin'
@@ -42,29 +49,36 @@ export function useAbbreviations() {
                 if (!versionCheckResponse.ok) throw new Error('Failed to check version');
                 const versionData: VersionCheckResponse = await versionCheckResponse.json();
 
+                // 更新が必要な場合のみ新しいデータを取得
+                if (versionData.needsUpdate || !cachedData) {
+                    const dataResponse = await fetch(`${WORKER_URL}/get-data?version=${versionData.latestVersion}`, {
+                        mode: 'cors',
+                        credentials: 'same-origin'
+                    });
+                    if (!dataResponse.ok) throw new Error('Failed to fetch data');
 
-                const dataResponse = await fetch(`${WORKER_URL}/get-data?version=${versionData.latestVersion}`, {
-                    mode: 'cors',
-                    credentials: 'same-origin'
-                });
-                if (!dataResponse.ok) throw new Error('Failed to fetch data');
+                    const arrayBuffer = await dataResponse.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    const decodedData = AbbreviationsMessage.decode(uint8Array);
+                    const abbreviationsData = AbbreviationsMessage.toObject(decodedData).abbreviations;
 
-                // ArrayBufferとしてデータを取得
-                const arrayBuffer = await dataResponse.arrayBuffer();
-                console.log('koko');
-                console.log(arrayBuffer);
+                    if (Object.keys(abbreviationsData).length === 0) {
+                        throw new Error('Received empty abbreviations data');
+                    }
 
-                // Protobufデータをデコード
-                const uint8Array = new Uint8Array(arrayBuffer);
-                const decodedData = AbbreviationsMessage.decode(uint8Array);
-                const abbreviationsData = AbbreviationsMessage.toObject(decodedData).abbreviations;
-
-                setAbbreviations(abbreviationsData);
-                localStorage.setItem('abbreviationsVersion', versionData.latestVersion.toString());
-                localStorage.setItem('abbreviationsData', JSON.stringify(abbreviationsData));
+                    setAbbreviations(abbreviationsData);
+                    localStorage.setItem('abbreviationsVersion', versionData.latestVersion.toString());
+                    localStorage.setItem('abbreviationsData', JSON.stringify(abbreviationsData));
+                }
             } catch (err) {
                 console.error('Error fetching abbreviations:', err);
                 setError('データの取得に失敗しました');
+                
+                // エラー時にキャッシュされたデータを使用
+                const cachedData = localStorage.getItem('abbreviationsData');
+                if (cachedData) {
+                    setAbbreviations(JSON.parse(cachedData));
+                }
             } finally {
                 setIsLoading(false);
             }
@@ -73,5 +87,11 @@ export function useAbbreviations() {
         fetchAbbreviations();
     }, []);
 
-    return { abbreviations, isLoading, error };
+    // nullチェックを追加
+    return { 
+        abbreviations: abbreviations || {}, 
+        isLoading, 
+        error,
+        isReady: abbreviations !== null
+    };
 }
