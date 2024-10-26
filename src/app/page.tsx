@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import styles from '../styles/Home.module.css';
 import { useAbbreviations } from '../hooks/useAbbreviations';
@@ -15,16 +15,6 @@ type SearchResult = {
 };
 
 
-function extractValues(data: string): {
-  text: string;
-} {
-  const jsonObject: { text: string }  = JSON.parse(data);
-  const text = jsonObject.text;
-  return {
-    text
-  };
-}
-
 export default function Home() {
   const [input, setInput] = useState<string>('');
   const [selectedAbbreviation, setSelectedAbbreviation] = useState<string | null>(null);
@@ -34,6 +24,11 @@ export default function Home() {
   const { abbreviations, isLoading: isAbbreviationsLoading, error } = useAbbreviations();
   const inputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+   const handleAbbreviationSelect = useCallback(async (abbreviation: string) => {
+    setSelectedAbbreviation(abbreviation);
+    await getAbbreviationDetails(abbreviation);
+  }, []);
   
   const fuse = useMemo(() => {
     if (!abbreviations) return null;
@@ -50,12 +45,10 @@ export default function Home() {
   }, [input, fuse]);
 
 async function getAbbreviationDetails(abbreviation: string) {
-    // 進行中のリクエストがあればキャンセル
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
 
-    // 新しいAbortControllerを作成
     abortControllerRef.current = new AbortController();
 
     setIsLoading(true);
@@ -85,50 +78,48 @@ async function getAbbreviationDetails(abbreviation: string) {
       }
 
       while (true) {
-        let readResult: ReadableStreamDefaultReadResult<Uint8Array>;
         try {
-          readResult = await reader.read();
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6)) as { text?: string; error?: string; done?: boolean };
+                
+                if (data.error) {
+                  setGeminiResponse('エラーが発生しました: ' + data.error);
+                  break;
+                }
+                
+                if (data.done) {
+                  setIsLoading(false);
+                  break;
+                }
+                
+                if (data.text) {
+                  accumulatedText += data.text;
+                  setGeminiResponse(accumulatedText);
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e);
+              }
+            }
+          }
         } catch (error) {
-          if (error.name === 'AbortError') {
+          if (error instanceof Error && error.name === 'AbortError') {
             console.log('Request was aborted');
             return;
           }
           throw error;
         }
-
-        const { done, value } = readResult;
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              if (data.error) {
-                setGeminiResponse('エラーが発生しました: ' + data.error);
-                break;
-              }
-              
-              if (data.done) {
-                setIsLoading(false);
-                break;
-              }
-              
-              if (data.text) {
-                accumulatedText += data.text;
-                setGeminiResponse(accumulatedText);
-              }
-            } catch (e) {
-              console.error('Error parsing SSE data:', e);
-            }
-          }
-        }
       }
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         console.log('Request was aborted');
         return;
       }
@@ -157,13 +148,25 @@ async function getAbbreviationDetails(abbreviation: string) {
     }
   }, [searchResults]);
 
+  useEffect(() => {
+    if (searchResults.length > 0) {
+      handleAbbreviationSelect(searchResults[0].item);
+      setSelectedIndex(0);
+    } else {
+      setSelectedAbbreviation(null);
+      setGeminiResponse(null);
+    }
+  }, [searchResults, handleAbbreviationSelect]);
+
+  useEffect(() => {
+    if (searchResults[selectedIndex]) {
+      handleAbbreviationSelect(searchResults[selectedIndex].item);
+    }
+  }, [selectedIndex, searchResults, handleAbbreviationSelect]);
+
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value.toUpperCase());
-  };
-
-  const handleAbbreviationSelect = async (abbreviation: string) => {
-    setSelectedAbbreviation(abbreviation);
-    await getAbbreviationDetails(abbreviation);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
