@@ -14,6 +14,7 @@ type SearchResult = {
   score: number;
 };
 
+
 function extractValues(data: string): {
   text: string;
 } {
@@ -32,6 +33,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { abbreviations, isLoading: isAbbreviationsLoading, error } = useAbbreviations();
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   const fuse = useMemo(() => {
     if (!abbreviations) return null;
@@ -47,43 +49,103 @@ export default function Home() {
     return fuse.search(input) as SearchResult[];
   }, [input, fuse]);
 
-  async function getAbbreviationDetails(abbreviation: string) {
+async function getAbbreviationDetails(abbreviation: string) {
+    // 進行中のリクエストがあればキャンセル
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // 新しいAbortControllerを作成
+    abortControllerRef.current = new AbortController();
+
     setIsLoading(true);
-    const meaning =(abbreviations as Abbreviations)[abbreviation];
+    setGeminiResponse('');
+    const meaning = (abbreviations as Abbreviations)[abbreviation];
+    
     try {
       const response = await fetch('https://abbreviation-search.shigekazukoya.workers.dev/get-abbreviation-details', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ meaning })
+        body: JSON.stringify({ meaning }),
+        signal: abortControllerRef.current.signal
       });
-      console.log(abbreviation);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      
-      if (data.error) {
-        console.error('Error:', data.error);
-        setGeminiResponse('エラーが発生しました。');
-      } else {
-        console.log(data);
-        const text = JSON.stringify(data, null, 2);
-        console.log(text);
-        const result = extractValues(text);
-        console.log(result);
-        setGeminiResponse(result.text);
+      let accumulatedText = '';
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
+
+      while (true) {
+        let readResult: ReadableStreamDefaultReadResult<Uint8Array>;
+        try {
+          readResult = await reader.read();
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            console.log('Request was aborted');
+            return;
+          }
+          throw error;
+        }
+
+        const { done, value } = readResult;
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.error) {
+                setGeminiResponse('エラーが発生しました: ' + data.error);
+                break;
+              }
+              
+              if (data.done) {
+                setIsLoading(false);
+                break;
+              }
+              
+              if (data.text) {
+                accumulatedText += data.text;
+                setGeminiResponse(accumulatedText);
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
       console.error('Error fetching abbreviation details:', error);
       setGeminiResponse('データの取得中にエラーが発生しました。');
     } finally {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (searchResults.length > 0) {
@@ -134,70 +196,77 @@ export default function Home() {
   }, []);
 
   return (
- <div className={styles.container}>
-    <h1 className={styles.title}>略語検索アプリ</h1>
-    <div className={styles.mainContent}>
-      <div className={styles.leftSection}>
-        <div className={styles.searchContainer}>
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="略語を入力してください"
-            className={styles.input}
-            disabled={isAbbreviationsLoading}
-            inputMode="search"
-          />
-        </div>
+    <div className={styles.container}>
+      <h1 className={styles.title}>略語検索アプリ</h1>
+      <div className={styles.mainContent}>
+        <div className={styles.leftSection}>
+          <div className={styles.searchContainer}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder="略語を入力してください"
+              className={styles.input}
+              disabled={isAbbreviationsLoading}
+              inputMode="search"
+            />
+          </div>
           
- <div className={styles.resultSection}>
-          {isAbbreviationsLoading ? (
-            <p className={styles.loading}>データ読み込み中...</p>
-          ) : error ? (
-            <p className={styles.error}>{error}</p>
-          ) : input ? (
-            searchResults.length > 0 ? (
-              <ul className={styles.resultList}>
-                {searchResults.map(({ item, score }, index) => (
-                  <li 
-                    key={item} 
-                    className={`${styles.resultItem} ${selectedIndex === index ? styles.selected : ''}`}
-                    onClick={() => {
-                      setSelectedIndex(index);
-                      handleAbbreviationSelect(item);
-                    }}
-                  >
-                    <span className={styles.abbreviation}>{item}</span>
-                    <span className={styles.meaning}>{(abbreviations as Abbreviations)[item]}</span>
-                    <span className={styles.score}>類似度: {((1 - score) * 100).toFixed(2)}%</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.noResult}>一致する略語が見つかりません</p>
-            )
-          ) : (
-            <p className={styles.instruction}>略語を入力すると候補が表示されます</p>
-          )}
-        </div>
-      </div>
-
-        <div className={styles.rightSection}>
-          {selectedAbbreviation && (
-            <div className={styles.detailSection}>
-              <h2>{selectedAbbreviation} - {(abbreviations as Abbreviations)[selectedAbbreviation]}</h2>
-              {isLoading ? (
-                <p className={styles.loading}>Gemini APIからの応答を待っています...</p>
-              ) : geminiResponse ? (
-                  <div className={styles.markdownPreview}>
-                    <ReactMarkdown>{geminiResponse}</ReactMarkdown>
-                  </div>
+          <div className={styles.resultSection}>
+            {isAbbreviationsLoading ? (
+              <p className={styles.loading}>データ読み込み中...</p>
+            ) : error ? (
+              <p className={styles.error}>{error}</p>
+            ) : input ? (
+              searchResults.length > 0 ? (
+                <ul className={styles.resultList}>
+                  {searchResults.map(({ item, score }, index) => (
+                    <li 
+                      key={item} 
+                      className={`${styles.resultItem} ${selectedIndex === index ? styles.selected : ''}`}
+                      onClick={() => {
+                        setSelectedIndex(index);
+                        handleAbbreviationSelect(item);
+                      }}
+                    >
+                      <span className={styles.abbreviation}>{item}</span>
+                      <span className={styles.meaning}>{(abbreviations as Abbreviations)[item]}</span>
+                      <span className={styles.score}>類似度: {((1 - score) * 100).toFixed(2)}%</span>
+                    </li>
+                  ))}
+                </ul>
               ) : (
-                <p className={styles.error}>Gemini APIからの応答の取得に失敗しました。</p>
+                <p className={styles.noResult}>一致する略語が見つかりません</p>
+              )
+            ) : (
+              <p className={styles.instruction}>略語を入力すると候補が表示されます</p>
+            )}
+          </div>
+        </div>
+
+<div className={styles.rightSection}>
+      {selectedAbbreviation && (
+        <div className={styles.detailSection}>
+          <h2>{selectedAbbreviation} - {(abbreviations as Abbreviations)[selectedAbbreviation]}</h2>
+          {isLoading ? (
+            <div className={styles.loadingContainer}>
+              <p className={styles.loadingText}>回答を生成中...</p>
+              {geminiResponse && (
+                <div className={styles.markdownPreview}>
+                  <ReactMarkdown>{geminiResponse}</ReactMarkdown>
+                </div>
               )}
             </div>
+          ) : geminiResponse ? (
+            <div className={styles.markdownPreview}>
+              <ReactMarkdown>{geminiResponse}</ReactMarkdown>
+            </div>
+          ) : (
+            <p className={styles.error}>Gemini APIからの応答の取得に失敗しました。</p>
+          )}
+        </div>
           )}
         </div>
       </div>
