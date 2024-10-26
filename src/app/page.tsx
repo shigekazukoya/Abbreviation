@@ -45,6 +45,8 @@ export default function Home() {
   }, [input, fuse]);
 
 async function getAbbreviationDetails(abbreviation: string) {
+    if (!abbreviation || !abbreviations) return;  // 早期リターン追加
+    
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -55,20 +57,29 @@ async function getAbbreviationDetails(abbreviation: string) {
     setGeminiResponse('');
     const meaning = (abbreviations as Abbreviations)[abbreviation];
     
+    // meaningが存在しない場合の処理を追加
+    if (!meaning) {
+      setGeminiResponse('略語の意味が見つかりませんでした。');
+      setIsLoading(false);
+      return;
+    }
+    
     try {
       const response = await fetch('https://abbreviation-search.shigekazukoya.workers.dev/get-abbreviation-details', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ meaning }),
+        body: JSON.stringify({ 
+          meaning,
+          abbreviation  // 略語も送信
+        }),
         signal: abortControllerRef.current.signal
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
       let accumulatedText = '';
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
